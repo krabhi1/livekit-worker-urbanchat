@@ -1,14 +1,6 @@
-
-livekit==1.0.6
-livekit-agents==1.0.16
-livekit-api==1.0.2
-livekit-plugins-cartesia==1.0.16
-livekit-plugins-elevenlabs==1.0.16
-livekit-plugins-deepgram==1.0.16
-livekit-plugins-elevenlabs==1.0.16
-livekit-plugins-noise-cancellation==0.2.1
-livekit-plugins-openai==1.0.16
-livekit-plugins-silero==1.0.16
-livekit-plugins-turn-detector==1.0.16
-livekit-protocol==1.0.2
-python-dotenv==1.1.0
+python-dotenv>=1.0
+livekit-protocol>=1.0.2
+livekit>=1.0.6
+livekit-agents>=1.0.16
+livekit-api>=1.0.2
+livekit-agents[openai, elevenlabs, deepgram, silero]>=1.0.16
