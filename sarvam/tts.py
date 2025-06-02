@@ -6,9 +6,7 @@ import base64
 import io
 import os
 import wave
-from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
-from typing import Literal
 
 import aiohttp
 
@@ -82,7 +80,7 @@ SarvamTTSSpeakers = Literal[
 
 
 @dataclass
-class SarvamTTSOptions:
+class _TTSOptions:
     """Options for the Sarvam.ai TTS service.
 
     Args:
@@ -163,7 +161,7 @@ class TTS(tts.TTS):
                 "Sarvam API key is required. Provide it directly or set SARVAM_API_KEY env var."
             )
 
-        self._opts = SarvamTTSOptions(
+        self._opts = _TTSOptions(
             target_language_code=target_language_code,
             model=model,
             speaker=speaker,
@@ -206,7 +204,7 @@ class ChunkedStream(tts.ChunkedStream):
         *,
         tts: TTS,
         input_text: str,
-        opts: SarvamTTSOptions,
+        opts: _TTSOptions,
         conn_options: APIConnectOptions,
         session: aiohttp.ClientSession,
     ) -> None:
@@ -263,7 +261,7 @@ class ChunkedStream(tts.ChunkedStream):
 
                 base64_wav = response_json["audios"][0]
                 wav_bytes = base64.b64decode(base64_wav)
-                print("-------", self._input_text, len(base64_wav))
+                logger.debug("------- %s %d", self._input_text, len(base64_wav))
 
                 # Parse WAV and generate AudioFrames
                 # Standard frame duration for WebRTC is 20ms, but can be 10ms. Let's use 20ms.
