@@ -17,7 +17,6 @@ from livekit.agents import (
 from livekit.agents.metrics import (
     AgentMetrics,
     LLMMetrics,
-    RealtimeModelMetrics,
     STTMetrics,
     TTSMetrics,
 )
@@ -63,13 +62,13 @@ class UsageCollector:
             self._summary.llm_audio_duration += metrics.duration
             logger.info(f"llm time {metrics.duration}")
 
-        elif isinstance(metrics, RealtimeModelMetrics):
-            self._summary.llm_prompt_tokens += metrics.input_tokens
-            self._summary.llm_prompt_cached_tokens += (
-                metrics.input_token_details.cached_tokens
-            )
-            self._summary.llm_completion_tokens += metrics.output_tokens
-            # self._summary.llm_audio_duration += metrics.duration
+        # elif isinstance(metrics, RealtimeModelMetrics):
+        #     self._summary.llm_prompt_tokens += metrics.input_tokens
+        #     self._summary.llm_prompt_cached_tokens += (
+        #         metrics.input_token_details.cached_tokens
+        #     )
+        #     self._summary.llm_completion_tokens += metrics.output_tokens
+        #     # self._summary.llm_audio_duration += metrics.duration
 
         elif isinstance(metrics, TTSMetrics):
             self._summary.tts_characters_count += metrics.characters_count
@@ -183,7 +182,7 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info(f"worker_payload: {worker_payload}")
 
     session = AgentSession(
-        stt=deepgram.STT(model="nova-2", language="multi"),
+        stt=deepgram.STT(model="nova-3", language="multi"),
         # stt=openai.STT(
         #     model="gpt-4o-transcribe",
         # ),
