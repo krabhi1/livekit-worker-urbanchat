@@ -183,17 +183,17 @@ async def entrypoint(ctx: agents.JobContext):
     logger.info(f"worker_payload: {worker_payload}")
 
     session = AgentSession(
-        # stt=deepgram.STT(model="nova-2", language="multi"),
-        stt=openai.STT(
-            model="gpt-4o-transcribe",
-        ),
+        stt=deepgram.STT(model="nova-2", language="multi"),
+        # stt=openai.STT(
+        #     model="gpt-4o-transcribe",
+        # ),
         llm=openai.LLM(model="gpt-4o-mini"),
         # Use one of the built-in TTS providers instead of custom SarvamTTS
         # tts=openai.TTS(),
-        # tts=sarvam.TTS(
-        #     speaker="meera", target_language_code="en-IN", model="bulbul:v1"
-        # ),
-        tts=openai.TTS(),
+        tts=sarvam.TTS(
+            speaker="meera", target_language_code="en-IN", model="bulbul:v1"
+        ),
+        # tts=openai.TTS(),
         vad=ctx.proc.userdata["vad"],
     )
 
