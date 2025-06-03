@@ -97,3 +97,21 @@ if __name__ == "__main__":
             agent_name="urbanchat-agent",
         ),
     )
+
+
+
+
+#  print("-----------init-------")
+
+#     @ctx.room.on("connected")
+#     def on_connected():
+#         logger.info("--Connected to the room!")
+
+#     @ctx.room.on("disconnected")
+#     def on_disconnected():
+#         logger.info("--Disconnected from the room!")
+
+#     # @ctx.room.on("participant_connected")
+#     # def on_participant_connected(participant):
+#     #     logger.info(f"--Participant connected: {participant}")
+#     #
