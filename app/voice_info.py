@@ -2,12 +2,6 @@ from dataclasses import dataclass
 from typing import Optional
 from enum import Enum
 
-from livekit import rtc
-from livekit.agents import JobContext
-
-from utils import WorkerPayload
-from app.api import get_agent_by_phone, get_agent_by_id
-
 
 # Enums for providers and other attributes
 class TTSProvider(str, Enum):
@@ -30,7 +24,7 @@ class LLMProvider(str, Enum):
 
 
 @dataclass
-class VoiceAgent:
+class VoiceInfo:
     id: str
     name: str
     language: str
@@ -66,7 +60,7 @@ class VoiceAgent:
 
     @staticmethod
     def from_json(data: dict):
-        return VoiceAgent(
+        return VoiceInfo(
             id=data["id"],
             user_id=data["userId"],
             name=data["name"],

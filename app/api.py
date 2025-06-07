@@ -36,7 +36,7 @@ async def update_call(call_id: str, user_id: str, call_data: dict):
             result = await response.json()
             if not is_ok(response.status):
                 raise ValueError(f"Failed to update call: {result}")
-            return await response.json()
+            return result["data"]
 
 
 async def register_inbound_call(fromNumber: str, toNumber: str):

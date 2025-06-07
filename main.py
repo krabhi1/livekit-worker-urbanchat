@@ -4,6 +4,7 @@ from livekit import agents, rtc
 from livekit.agents import (
     AgentSession,
     AutoSubscribe,
+    ErrorEvent,
     JobProcess,
     MetricsCollectedEvent,
     RoomInputOptions,
@@ -25,15 +26,13 @@ from app.api import (
     get_agent_by_phone,
     get_call_by_id,
     register_inbound_call,
-    update_call,
 )
-from app.call import Call
+from app.call_info import CallInfo
 
 from app.assistant import Assistant
 from app.usage_collector import UsageCollector
-from app.voice_agent import VoiceAgent
+from app.voice_info import VoiceInfo
 from sarvam import tts as sarvam
-from utils import get_worker_payload
 from livekit.api import LiveKitAPI
 
 from app.logger import logger
@@ -44,27 +43,27 @@ def prewarm(job: JobProcess):
 
 
 async def load(ctx: JobContext, p: rtc.RemoteParticipant):
-    agent: Optional[VoiceAgent] = None
-    call: Optional[Call] = None
+    agent: Optional[VoiceInfo] = None
+    call: Optional[CallInfo] = None
     is_web_call = p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD
     if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
         trunk_phone = p.attributes["sip.trunkPhoneNumber"].lstrip("+")
         phone = p.attributes["sip.phoneNumber"].lstrip("+")
         direction = p.attributes["direction"]
-        agent = VoiceAgent.from_json(await get_agent_by_phone(trunk_phone, direction))
+        agent = VoiceInfo.from_json(await get_agent_by_phone(trunk_phone, direction))
         if direction == "inbound":
             # Register the SIP call
-            call = Call.from_json(await register_inbound_call(phone, trunk_phone))
+            call = CallInfo.from_json(await register_inbound_call(phone, trunk_phone))
         elif direction == "outbound":
-            call = Call.from_json(await get_call_by_id(p.attributes["callId"]))
+            call = CallInfo.from_json(await get_call_by_id(p.attributes["callId"]))
 
     if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD:
         meta = json.loads(ctx.job.metadata or "{}")
         agent_id = meta["agentId"]
         user_id = meta["userId"]
         call_id = meta["callId"]
-        agent = VoiceAgent.from_json(await get_agent_by_id(agent_id, user_id))
-        call = Call.from_json(await get_call_by_id(call_id))
+        agent = VoiceInfo.from_json(await get_agent_by_id(agent_id, user_id))
+        call = CallInfo.from_json(await get_call_by_id(call_id))
     pass
 
     if not agent:
@@ -76,29 +75,54 @@ async def load(ctx: JobContext, p: rtc.RemoteParticipant):
 
 async def entrypoint(ctx: agents.JobContext):
     lk_api = LiveKitAPI()
+    is_call_ended = False
 
-    async def participant_entry(ctx: JobContext, p: rtc.RemoteParticipant):
-        if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            direction = p.attributes["direction"]
-            fromNumber = p.attributes["sip.phoneNumber"].lstrip("+")
-            toNumber = p.attributes["sip.trunkPhoneNumber"].lstrip("+")
-            if direction == "inbound":
-                # Register the SIP call
-                await register_inbound_call(fromNumber, toNumber)
-                logger.info(f"Registered inbound call from {fromNumber} to {toNumber}")
-                pass
+    # async def participant_entry(ctx: JobContext, p: rtc.RemoteParticipant):
+    #     if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+    #         direction = p.attributes["direction"]
+    #         fromNumber = p.attributes["sip.phoneNumber"].lstrip("+")
+    #         toNumber = p.attributes["sip.trunkPhoneNumber"].lstrip("+")
+    #         if direction == "inbound":
+    #             # Register the SIP call
+    #             await register_inbound_call(fromNumber, toNumber)
+    #             logger.info(f"Registered inbound call from {fromNumber} to {toNumber}")
+    #             pass
+    #
+    def on_call_ongoing():
+        # update status to ongoing
+        # start time
+        logger.info("Call is active")
 
-    ctx.add_participant_entrypoint(participant_entry)
+    def on_call_end(reason: str):
+        # get transcript
+        # calcuate cost
+        # end time
+        # recording url
+        # update status and reason
+        logger.info(f"Call ended: {reason}")
+
+    @ctx.room.on("participant_disconnected")
+    def on_participant_disconnected(p: rtc.RemoteParticipant):
+        global is_call_ended
+        logger.info(f"Participant disconnected: {p} {p.attributes}")
+        is_call_ended = True
+        on_call_end("user_hangup")
+
+    async def on_shutdown(reason: str):
+        logger.info(f"shutdown hook called {reason}")
+        if is_call_ended:
+            return
+        on_call_end("unknown")
+
+    ctx.add_shutdown_callback(on_shutdown)
+    # ctx.add_participant_entrypoint(participant_entry)
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
     participant = await ctx.wait_for_participant()
     logger.info(f"attributes: {participant.attributes} metadata: {ctx.job.metadata}")
-    payload = get_worker_payload(ctx, participant)
 
     call, agent, is_web_call = await load(ctx, participant)
     logger.info(f"call: {call}, agent: {agent}, is_web_call: {is_web_call}")
-
-    logger.info(f"worker_payload: {payload}")
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3", language="multi"),
@@ -121,11 +145,17 @@ async def entrypoint(ctx: agents.JobContext):
 
     @session.on("close")
     def _on_close(ev: CloseEvent):
-        # asyncio.create_task(application.on_close())
-        # update call status to successful
-        # await update_call()
-        logger.info("Session closed")
+        global is_call_ended
+        if is_call_ended:
+            return
+        is_call_ended = True
+        on_call_end("agent_hangup")
+        logger.info(f"Session closed {ev}")
         ctx.delete_room()
+
+    @session.on("error")
+    def _on_error(ev: ErrorEvent):
+        logger.error(f"Session error: {ev.error}")
 
     await session.start(
         room=ctx.room,
@@ -139,6 +169,7 @@ async def entrypoint(ctx: agents.JobContext):
             audio_enabled=True,
         ),
     )
+    on_call_ongoing()
     logger.info("Session started")
 
     # session.generate_reply(instructions="Greet the user and offer your assistance.")
