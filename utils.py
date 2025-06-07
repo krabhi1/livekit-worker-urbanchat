@@ -2,6 +2,7 @@ from livekit.agents import JobContext
 from itertools import chain
 import re
 from app.logger import logger
+from datetime import datetime
 
 
 async def room_stats(ctx: JobContext):
@@ -23,3 +24,7 @@ def camel_to_snake(name: str) -> str:
 
 def is_ok(code: int) -> bool:
     return 200 <= code < 300
+
+
+def timestamp():
+    return int(datetime.now().timestamp() * 1000)  # Return milliseconds since epoch

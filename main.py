@@ -27,19 +27,26 @@ from app.api import (
     get_call_by_id,
     register_inbound_call,
 )
-from app.call_info import CallInfo
+from app.call_info import CallDisconnectReason, CallInfo, CallStatus
 
 from app.assistant import Assistant
-from app.usage_collector import UsageCollector
+from app.usage_collector import AverageUsageCollector, UsageCollector
 from app.voice_info import VoiceInfo
 from sarvam import tts as sarvam
 from livekit.api import LiveKitAPI
 
 from app.logger import logger
 
+import utils
+
 
 def prewarm(job: JobProcess):
-    job.userdata["vad"] = silero.VAD.load()
+    job.userdata["vad"] = silero.VAD.load(
+        min_speech_duration=0.03,
+        min_silence_duration=0.3,
+        prefix_padding_duration=0.3,
+        activation_threshold=0.3,
+    )
 
 
 async def load(ctx: JobContext, p: rtc.RemoteParticipant):
@@ -76,34 +83,11 @@ async def load(ctx: JobContext, p: rtc.RemoteParticipant):
 async def entrypoint(ctx: agents.JobContext):
     lk_api = LiveKitAPI()
     is_call_ended = False
-
-    # async def participant_entry(ctx: JobContext, p: rtc.RemoteParticipant):
-    #     if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-    #         direction = p.attributes["direction"]
-    #         fromNumber = p.attributes["sip.phoneNumber"].lstrip("+")
-    #         toNumber = p.attributes["sip.trunkPhoneNumber"].lstrip("+")
-    #         if direction == "inbound":
-    #             # Register the SIP call
-    #             await register_inbound_call(fromNumber, toNumber)
-    #             logger.info(f"Registered inbound call from {fromNumber} to {toNumber}")
-    #             pass
-    #
-    def on_call_ongoing():
-        # update status to ongoing
-        # start time
-        logger.info("Call is active")
-
-    def on_call_end(reason: str):
-        # get transcript
-        # calcuate cost
-        # end time
-        # recording url
-        # update status and reason
-        logger.info(f"Call ended: {reason}")
+    usage_collector = AverageUsageCollector()
 
     @ctx.room.on("participant_disconnected")
     def on_participant_disconnected(p: rtc.RemoteParticipant):
-        global is_call_ended
+        nonlocal is_call_ended
         logger.info(f"Participant disconnected: {p} {p.attributes}")
         is_call_ended = True
         on_call_end("user_hangup")
@@ -137,15 +121,13 @@ async def entrypoint(ctx: agents.JobContext):
         vad=ctx.proc.userdata["vad"],
     )
 
-    usage_collector = UsageCollector()
-
     @session.on("metrics_collected")
     def _on_metrics_collected(ev: MetricsCollectedEvent):
         usage_collector.collect(ev.metrics)
 
     @session.on("close")
     def _on_close(ev: CloseEvent):
-        global is_call_ended
+        nonlocal is_call_ended
         if is_call_ended:
             return
         is_call_ended = True
@@ -156,6 +138,32 @@ async def entrypoint(ctx: agents.JobContext):
     @session.on("error")
     def _on_error(ev: ErrorEvent):
         logger.error(f"Session error: {ev.error}")
+
+    def on_call_ongoing():
+        # update status to ongoing
+        call.call_status = CallStatus.ONGOING
+        call.call_start_time = utils.timestamp()
+        # start time
+        logger.info("Call is active")
+        asyncio.create_task(call.update())
+
+    def on_call_end(reason: str):
+        # get transcript
+        history = session.history.to_dict()
+        transcript = json.dumps(history)
+
+        # TODO calcuate cost
+        # TODO recording url
+        call.call_status = CallStatus.ENDED
+        call.call_end_time = utils.timestamp()
+        call.call_disconnect_reason = CallDisconnectReason(reason)
+        call.transcript = transcript
+        # total_latency = eou.end_of_utterance_delay + llm.ttft + tts.ttfb
+        # update lantency info "eou.eud llm.ttft tts.ttfb"
+        call.latency = usage_collector.get_latency()
+
+        logger.info(f"Call ended: {reason}")
+        asyncio.create_task(call.update())
 
     await session.start(
         room=ctx.room,

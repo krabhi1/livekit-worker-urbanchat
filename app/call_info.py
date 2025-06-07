@@ -13,16 +13,16 @@ class CallStatus(str, Enum):
 
 
 class CallDisconnectReason(str, Enum):
-    user_hangup = "user_hangup"
-    agent_hangup = "agent_hangup"
-    call_transfer = "call_transfer"
-    inactivity = "inactivity"
-    max_duration_reached = "max_duration_reached"
-    concurrent_call_limit_reached = "concurrent_call_limit_reached"
-    dial_busy = "dial_busy"
-    dial_no_answer = "dial_no_answer"
-    error_unknown = "error_unknown"
-    unknown = "unknown"
+    USER_HANGUP = "user_hangup"
+    AGENT_HANGUP = "agent_hangup"
+    CALL_TRANSFER = "call_transfer"
+    INACTIVITY = "inactivity"
+    MAX_DURATION_REACHED = "max_duration_reached"
+    CONCURRENT_CALL_LIMIT_REACHED = "concurrent_call_limit_reached"
+    DIAL_BUSY = "dial_busy"
+    DIAL_NO_ANSWER = "dial_no_answer"
+    ERROR_UNKNOWN = "error_unknown"
+    UNKNOWN = "unknown"
 
 
 @dataclass
@@ -35,6 +35,7 @@ class CallInfo:
     call_start_time: Optional[int] = None
     call_end_time: Optional[int] = None
     transcript: Optional[str] = None
+    latency: Optional[str] = None
 
     @staticmethod
     def from_json(data):
@@ -51,6 +52,7 @@ class CallInfo:
             call_start_time=data.get("callStartTime", None),
             call_end_time=data.get("callEndTime", None),
             transcript=data.get("transcript", None),
+            latency=data.get("latency", None),
         )
 
     async def update(self):
@@ -63,6 +65,7 @@ class CallInfo:
             "callStartTime": self.call_start_time,
             "callEndTime": self.call_end_time,
             "transcript": self.transcript,
+            "latency": self.latency,
         }
         new_call = CallInfo.from_json(await update_call(self.id, self.user_id, body))
         self.call_status = new_call.call_status
@@ -71,3 +74,4 @@ class CallInfo:
         self.call_start_time = new_call.call_start_time
         self.call_end_time = new_call.call_end_time
         self.transcript = new_call.transcript
+        self.latency = new_call.latency

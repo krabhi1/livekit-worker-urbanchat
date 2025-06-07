@@ -63,3 +63,52 @@ class UsageCollector:
 
     def get_summary(self) -> UsageSummary:
         return deepcopy(self._summary)
+
+    def get_latency(self) -> str:
+        return f"{self._summary.eou_end_of_utterance_delay:.2f} {self._summary.llm_ttft:.2f} {self._summary.tts_ttfb:.2f}"
+
+
+class AverageUsageCollector:
+    def __init__(self) -> None:
+        self._summary = UsageSummary(0, 0, 0, 0, 0.0)
+
+        # New internal counters
+        self._eou_delays = []
+        self._llm_ttfts = []
+        self._tts_ttfbs = []
+
+    def __call__(self, metrics: AgentMetrics) -> None:
+        self.collect(metrics)
+
+    def collect(self, metrics: AgentMetrics) -> None:
+        if isinstance(metrics, EOUMetrics):
+            self._eou_delays.append(metrics.end_of_utterance_delay)
+            logger.info(f"eou time {metrics.end_of_utterance_delay}")
+
+        elif isinstance(metrics, LLMMetrics):
+            self._summary.llm_prompt_tokens += metrics.prompt_tokens
+            self._summary.llm_prompt_cached_tokens += metrics.prompt_cached_tokens
+            self._summary.llm_completion_tokens += metrics.completion_tokens
+            self._llm_ttfts.append(metrics.ttft)
+            logger.info(f"llm time {metrics.ttft}")
+
+        elif isinstance(metrics, TTSMetrics):
+            self._summary.tts_characters_count += metrics.characters_count
+            self._tts_ttfbs.append(metrics.ttfb)
+            logger.info(f"tts time {metrics.ttfb}")
+
+    def get_summary(self) -> UsageSummary:
+        # Compute averages
+        self._summary.eou_end_of_utterance_delay = (
+            sum(self._eou_delays) / len(self._eou_delays) if self._eou_delays else 0.0
+        )
+        self._summary.llm_ttft = (
+            sum(self._llm_ttfts) / len(self._llm_ttfts) if self._llm_ttfts else 0.0
+        )
+        self._summary.tts_ttfb = (
+            sum(self._tts_ttfbs) / len(self._tts_ttfbs) if self._tts_ttfbs else 0.0
+        )
+        return deepcopy(self._summary)
+
+    def get_latency(self) -> str:
+        return f"{self._summary.eou_end_of_utterance_delay:.2f} {self._summary.llm_ttft:.2f} {self._summary.tts_ttfb:.2f}"
