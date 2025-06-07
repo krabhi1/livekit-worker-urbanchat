@@ -36,9 +36,7 @@ class Assistant(Agent):
             stt=deepgram.STT(model="nova-3", language="multi"),
             llm=openai.LLM(model="gpt-4o-mini"),
             # tts=openai.TTS(),
-            tts=sarvam.TTS(
-                speaker="meera", target_language_code="en-IN", model="bulbul:v1"
-            ),
+            tts=sarvam.TTS(speaker="meera", target_language_code="en-IN", model="bulbul:v1"),
             # use LiveKit's transformer-based turn detector
         )
 
@@ -99,8 +97,6 @@ if __name__ == "__main__":
     )
 
 
-
-
 #  print("-----------init-------")
 
 #     @ctx.room.on("connected")
@@ -115,3 +111,18 @@ if __name__ == "__main__":
 #     # def on_participant_connected(participant):
 #     #     logger.info(f"--Participant connected: {participant}")
 #     #
+#
+#
+# @ctx.room.on("participant_disconnected")
+# def on_participant_disconnected(p: rtc.RemoteParticipant):
+#     summary = usage_collector.get_summary()
+#     if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD:
+#         pass
+#     elif p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+#         pass
+#     logger.info(f"Participant disconnected: {p} Summary: {summary}")
+
+# async def my_shutdown_hook():
+#     logger.info("worker is shutting down")
+
+# ctx.add_shutdown_callback(my_shutdown_hook)

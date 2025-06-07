@@ -16,7 +16,7 @@ python main.py console|dev|start
 
 #for linux
 sudo apt install python3 python3-pip
-	sudo apt install python3.12-venv
+sudo apt install python3.11-venv
 sudo apt install portaudio19-dev
 
 #if using pipewire

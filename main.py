@@ -1,3 +1,5 @@
+import json
+from typing import Optional
 from livekit import agents, rtc
 from livekit.agents import (
     AgentSession,
@@ -9,17 +11,27 @@ from livekit.agents import (
     JobContext,
     CloseEvent,
 )
+import app.env  # noqa: F401
 
 from livekit.plugins import (
     deepgram,
     openai,
     silero,
 )
+import asyncio
 
-import app.env  # noqa: F401
+from app.api import (
+    get_agent_by_id,
+    get_agent_by_phone,
+    get_call_by_id,
+    register_inbound_call,
+    update_call,
+)
+from app.call import Call
 
 from app.assistant import Assistant
 from app.usage_collector import UsageCollector
+from app.voice_agent import VoiceAgent
 from sarvam import tts as sarvam
 from utils import get_worker_payload
 from livekit.api import LiveKitAPI
@@ -31,41 +43,62 @@ def prewarm(job: JobProcess):
     job.userdata["vad"] = silero.VAD.load()
 
 
-# Add any cleanup code here
+async def load(ctx: JobContext, p: rtc.RemoteParticipant):
+    agent: Optional[VoiceAgent] = None
+    call: Optional[Call] = None
+    is_web_call = p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD
+    if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+        trunk_phone = p.attributes["sip.trunkPhoneNumber"].lstrip("+")
+        phone = p.attributes["sip.phoneNumber"].lstrip("+")
+        direction = p.attributes["direction"]
+        agent = VoiceAgent.from_json(await get_agent_by_phone(trunk_phone, direction))
+        if direction == "inbound":
+            # Register the SIP call
+            call = Call.from_json(await register_inbound_call(phone, trunk_phone))
+        elif direction == "outbound":
+            call = Call.from_json(await get_call_by_id(p.attributes["callId"]))
+
+    if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD:
+        meta = json.loads(ctx.job.metadata or "{}")
+        agent_id = meta["agentId"]
+        user_id = meta["userId"]
+        call_id = meta["callId"]
+        agent = VoiceAgent.from_json(await get_agent_by_id(agent_id, user_id))
+        call = Call.from_json(await get_call_by_id(call_id))
+    pass
+
+    if not agent:
+        raise ValueError("No agent found for the participant.")
+    if not call:
+        raise ValueError("No call found for the participant.")
+    return call, agent, is_web_call
 
 
 async def entrypoint(ctx: agents.JobContext):
     lk_api = LiveKitAPI()
 
     async def participant_entry(ctx: JobContext, p: rtc.RemoteParticipant):
-        logger.info(f"Participant entrypoint {p} attributes: {p.attributes}")
-        if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD:
-            pass
-        elif p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            pass
+        if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+            direction = p.attributes["direction"]
+            fromNumber = p.attributes["sip.phoneNumber"].lstrip("+")
+            toNumber = p.attributes["sip.trunkPhoneNumber"].lstrip("+")
+            if direction == "inbound":
+                # Register the SIP call
+                await register_inbound_call(fromNumber, toNumber)
+                logger.info(f"Registered inbound call from {fromNumber} to {toNumber}")
+                pass
 
-    @ctx.room.on("participant_disconnected")
-    def on_participant_disconnected(p: rtc.RemoteParticipant):
-        summary = usage_collector.get_summary()
-        if p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_STANDARD:
-            pass
-        elif p.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
-            pass
-        logger.info(f"Participant disconnected: {p} Summary: {summary}")
-
-    async def my_shutdown_hook():
-        logger.info("worker is shutting down")
-
-    ctx.add_shutdown_callback(my_shutdown_hook)
     ctx.add_participant_entrypoint(participant_entry)
-
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
     participant = await ctx.wait_for_participant()
-    print(f"participant connected: {participant} attributes: {participant.attributes}")
+    logger.info(f"attributes: {participant.attributes} metadata: {ctx.job.metadata}")
+    payload = get_worker_payload(ctx, participant)
 
-    worker_payload = get_worker_payload(ctx.job.metadata or "{}")
-    logger.info(f"worker_payload: {worker_payload}")
+    call, agent, is_web_call = await load(ctx, participant)
+    logger.info(f"call: {call}, agent: {agent}, is_web_call: {is_web_call}")
+
+    logger.info(f"worker_payload: {payload}")
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3", language="multi"),
@@ -87,7 +120,10 @@ async def entrypoint(ctx: agents.JobContext):
         usage_collector.collect(ev.metrics)
 
     @session.on("close")
-    def _on_close(ev:CloseEvent):
+    def _on_close(ev: CloseEvent):
+        # asyncio.create_task(application.on_close())
+        # update call status to successful
+        # await update_call()
         logger.info("Session closed")
         ctx.delete_room()
 
