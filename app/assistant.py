@@ -2,18 +2,18 @@ from livekit.agents import (
     Agent,
     function_tool,
     RunContext,
-    get_job_context,
 )
 import asyncio
 from .logger import logger
 
-from livekit.api import LiveKitAPI, DeleteRoomRequest
+from .voice_info import VoiceInfo
+
 
 class Assistant(Agent):
-    def __init__(self, lk_api: LiveKitAPI) -> None:
-        super().__init__(instructions="You are a helpful voice AI assistant.")
-        self.lk_api = lk_api
+    def __init__(self, voice_info: VoiceInfo, instructions: str) -> None:
+        super().__init__(instructions=instructions)
         self._closing_task: asyncio.Task[None] | None = None
+        self.voice_info = voice_info
 
     async def on_enter(self):
         logger.info("Agent on_enter")
@@ -30,7 +30,10 @@ class Assistant(Agent):
         current_speech = ctx.session.current_speech
         if current_speech:
             await current_speech.wait_for_playout()
-        await self.session.say("Thank you for calling. Goodbye!")
+        if self.voice_info.language == "hi":
+            await ctx.session.say("कॉल करने के लिए धन्यवाद। आपका दिन शुभ रहे!")
+        else:
+            await self.session.say("Thank you for calling. Goodbye!")
         # job_ctx = get_job_context()
         # await self.lk_api.room.delete_room(DeleteRoomRequest(room=job_ctx.room.name))
         # don't await it, the function call will be awaited before closing

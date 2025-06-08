@@ -1,9 +1,6 @@
 import aiohttp
-
-
 from app import env
 from utils import is_ok
-
 
 HEADERS = {"x-server-api-key": env.SERVER_API_KEY}
 

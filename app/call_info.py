@@ -12,17 +12,17 @@ class CallStatus(str, Enum):
     ERROR = "error"
 
 
-class CallDisconnectReason(str, Enum):
-    USER_HANGUP = "user_hangup"
-    AGENT_HANGUP = "agent_hangup"
-    CALL_TRANSFER = "call_transfer"
-    INACTIVITY = "inactivity"
-    MAX_DURATION_REACHED = "max_duration_reached"
-    CONCURRENT_CALL_LIMIT_REACHED = "concurrent_call_limit_reached"
-    DIAL_BUSY = "dial_busy"
-    DIAL_NO_ANSWER = "dial_no_answer"
-    ERROR_UNKNOWN = "error_unknown"
-    UNKNOWN = "unknown"
+# class CallDisconnectReason(str, Enum):
+#     USER_HANGUP = "user_hangup"
+#     AGENT_HANGUP = "agent_hangup"
+#     CALL_TRANSFER = "call_transfer"
+#     INACTIVITY = "inactivity"
+#     MAX_DURATION_REACHED = "max_duration_reached"
+#     CONCURRENT_CALL_LIMIT_REACHED = "concurrent_call_limit_reached"
+#     DIAL_BUSY = "dial_busy"
+#     DIAL_NO_ANSWER = "dial_no_answer"
+#     ERROR_UNKNOWN = "error_unknown"
+#     UNKNOWN = "unknown"
 
 
 @dataclass
@@ -31,7 +31,7 @@ class CallInfo:
     user_id: str
     call_status: CallStatus
     cost: float
-    call_disconnect_reason: Optional[CallDisconnectReason] = None
+    call_disconnect_reason: Optional[str] = None
     call_start_time: Optional[int] = None
     call_end_time: Optional[int] = None
     transcript: Optional[str] = None
@@ -44,11 +44,7 @@ class CallInfo:
             user_id=data["userId"],
             call_status=CallStatus(data["callStatus"]),
             cost=data.get("cost", 0.0),
-            call_disconnect_reason=(
-                CallDisconnectReason(reason)
-                if (reason := data.get("callDisconnectReason"))
-                else None
-            ),
+            call_disconnect_reason=data.get("callDisconnectReason"),
             call_start_time=data.get("callStartTime", None),
             call_end_time=data.get("callEndTime", None),
             transcript=data.get("transcript", None),
@@ -59,9 +55,7 @@ class CallInfo:
         body = {
             "callStatus": self.call_status.value,
             "cost": self.cost,
-            "callDisconnectReason": (
-                self.call_disconnect_reason.value if self.call_disconnect_reason else None
-            ),
+            "callDisconnectReason": self.call_disconnect_reason,
             "callStartTime": self.call_start_time,
             "callEndTime": self.call_end_time,
             "transcript": self.transcript,
